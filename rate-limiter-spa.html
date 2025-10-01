@@ -1,0 +1,1091 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rate Limiter System Design - Interactive Summary</title>
+    <style>
+        :root {
+            --primary-color: #6366f1;
+            --secondary-color: #8b5cf6;
+            --accent-color: #ec4899;
+            --bg-dark: #0f172a;
+            --bg-light: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, var(--bg-light) 100%);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Navigation */
+        nav {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            backdrop-filter: blur(10px);
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+            z-index: 1000;
+            padding: 1rem 2rem;
+        }
+
+        .nav-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 2rem;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: var(--text-secondary);
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-weight: 500;
+            position: relative;
+        }
+
+        .nav-links a:hover,
+        .nav-links a.active {
+            color: var(--primary-color);
+        }
+
+        .nav-links a.active::after {
+            content: '';
+            position: absolute;
+            bottom: -5px;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+
+        /* Main Content */
+        main {
+            margin-top: 80px;
+            padding: 2rem;
+            max-width: 1400px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        section {
+            margin-bottom: 4rem;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: fadeInUp 0.6s ease forwards;
+        }
+
+        @keyframes fadeInUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Hero Section */
+        .hero {
+            text-align: center;
+            padding: 4rem 2rem;
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border-radius: 20px;
+            margin-bottom: 3rem;
+        }
+
+        .hero h1 {
+            font-size: 3.5rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color), var(--accent-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 1rem;
+            animation: pulse 3s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.9; }
+        }
+
+        .hero p {
+            font-size: 1.2rem;
+            color: var(--text-secondary);
+        }
+
+        /* Cards */
+        .card {
+            background: rgba(30, 41, 59, 0.8);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+            border-radius: 16px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+            backdrop-filter: blur(10px);
+            transition: all 0.3s ease;
+        }
+
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(99, 102, 241, 0.1);
+            border-color: rgba(99, 102, 241, 0.3);
+        }
+
+        .card h2 {
+            color: var(--primary-color);
+            margin-bottom: 1.5rem;
+            font-size: 1.8rem;
+        }
+
+        .card h3 {
+            color: var(--secondary-color);
+            margin-bottom: 1rem;
+            font-size: 1.3rem;
+        }
+
+        /* Stats Grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 2rem;
+            margin: 2rem 0;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
+            border-radius: 12px;
+            padding: 1.5rem;
+            text-align: center;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .stat-number {
+            font-size: 2.5rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-label {
+            color: var(--text-secondary);
+            margin-top: 0.5rem;
+        }
+
+        /* Algorithm Comparison Table */
+        .comparison-table {
+            overflow-x: auto;
+            margin: 2rem 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        th {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        tr:hover {
+            background: rgba(99, 102, 241, 0.05);
+        }
+
+        tr:nth-child(even) {
+            background: rgba(30, 41, 59, 0.3);
+        }
+
+        /* Visual Illustrations */
+        .algorithm-visual {
+            background: rgba(30, 41, 59, 0.5);
+            border-radius: 16px;
+            padding: 2rem;
+            margin: 2rem 0;
+            min-height: 400px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .visual-controls {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .btn {
+            padding: 0.8rem 1.5rem;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.3s ease;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        /* Token Bucket Animation */
+        .token-bucket {
+            width: 250px;
+            height: 300px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .bucket {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 200px;
+            border: 3px solid var(--primary-color);
+            border-radius: 0 0 20px 20px;
+            background: linear-gradient(180deg, transparent 50%, rgba(99, 102, 241, 0.1) 100%);
+            overflow: hidden;
+            display: flex;
+            flex-wrap: wrap-reverse;
+            align-content: flex-end;
+            justify-content: center;
+            padding: 10px;
+            gap: 5px;
+        }
+
+        .token {
+            width: 35px;
+            height: 35px;
+            background: radial-gradient(circle, var(--accent-color), var(--secondary-color));
+            border-radius: 50%;
+            box-shadow: 0 0 15px rgba(236, 72, 153, 0.4);
+            animation: dropIn 0.5s ease-out;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            font-weight: bold;
+            color: white;
+        }
+
+        .token.consumed {
+            animation: consumeToken 0.5s ease-out forwards;
+        }
+
+        @keyframes dropIn {
+            from {
+                transform: translateY(-100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        @keyframes consumeToken {
+            to {
+                transform: scale(0) rotate(360deg);
+                opacity: 0;
+            }
+        }
+
+        .token-counter {
+            position: absolute;
+            top: -40px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 1.2rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .request-indicator {
+            position: absolute;
+            right: -150px;
+            top: 50%;
+            transform: translateY(-50%);
+            padding: 10px 20px;
+            border-radius: 8px;
+            font-weight: bold;
+            opacity: 0;
+            animation: fadeInOut 2s ease-out forwards;
+        }
+
+        .request-indicator.success {
+            background: rgba(16, 185, 129, 0.2);
+            color: var(--success);
+            border: 1px solid var(--success);
+        }
+
+        .request-indicator.error {
+            background: rgba(239, 68, 68, 0.2);
+            color: var(--error);
+            border: 1px solid var(--error);
+        }
+
+        @keyframes fadeInOut {
+            0% { opacity: 0; transform: translateY(-50%) translateX(20px); }
+            20% { opacity: 1; transform: translateY(-50%) translateX(0); }
+            80% { opacity: 1; transform: translateY(-50%) translateX(0); }
+            100% { opacity: 0; transform: translateY(-50%) translateX(-20px); }
+        }
+
+        /* Leaky Bucket Animation */
+        .leaky-bucket {
+            width: 200px;
+            height: 300px;
+            margin: 0 auto;
+            position: relative;
+        }
+
+        .water-level {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            background: linear-gradient(180deg, rgba(59, 130, 246, 0.8), rgba(99, 102, 241, 0.9));
+            border-radius: 0 0 20px 20px;
+            transition: height 0.5s ease;
+        }
+
+        .leak {
+            position: absolute;
+            bottom: -30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 4px;
+            height: 30px;
+            background: linear-gradient(180deg, rgba(59, 130, 246, 0.8), transparent);
+            animation: drip 2s infinite;
+        }
+
+        @keyframes drip {
+            0%, 100% { opacity: 0; }
+            50% { opacity: 1; }
+        }
+
+        /* Window Visualizations */
+        .window-timeline {
+            height: 100px;
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 12px;
+            position: relative;
+            overflow: hidden;
+            margin: 2rem 0;
+        }
+
+        .window-segment {
+            position: absolute;
+            height: 100%;
+            border-right: 2px dashed rgba(148, 163, 184, 0.3);
+        }
+
+        .request-bar {
+            position: absolute;
+            bottom: 0;
+            width: 8px;
+            background: linear-gradient(180deg, var(--success), var(--primary-color));
+            border-radius: 4px 4px 0 0;
+            transition: all 0.3s ease;
+        }
+
+        .sliding-window {
+            position: absolute;
+            height: 100%;
+            background: rgba(99, 102, 241, 0.2);
+            border: 2px solid var(--primary-color);
+            border-radius: 8px;
+            transition: left 0.5s ease;
+        }
+
+        /* Code Block */
+        .code-block {
+            background: rgba(15, 23, 42, 0.9);
+            border-radius: 12px;
+            padding: 1.5rem;
+            overflow-x: auto;
+            margin: 1rem 0;
+            border: 1px solid rgba(99, 102, 241, 0.2);
+        }
+
+        .code-block pre {
+            color: var(--text-primary);
+            font-family: 'Monaco', 'Courier New', monospace;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        .code-keyword { color: var(--primary-color); }
+        .code-string { color: var(--success); }
+        .code-number { color: var(--accent-color); }
+        .code-comment { color: var(--text-secondary); font-style: italic; }
+
+        /* Accordion */
+        .accordion {
+            margin: 2rem 0;
+        }
+
+        .accordion-item {
+            background: rgba(30, 41, 59, 0.8);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            overflow: hidden;
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+
+        .accordion-header {
+            padding: 1.5rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.3s ease;
+        }
+
+        .accordion-header:hover {
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .accordion-content {
+            padding: 0 1.5rem;
+            max-height: 0;
+            overflow: hidden;
+            transition: all 0.3s ease;
+        }
+
+        .accordion-item.active .accordion-content {
+            max-height: 500px;
+            padding: 0 1.5rem 1.5rem;
+        }
+
+        .accordion-icon {
+            transition: transform 0.3s ease;
+        }
+
+        .accordion-item.active .accordion-icon {
+            transform: rotate(180deg);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 2rem;
+            }
+            
+            .nav-links {
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        /* Loading Animation */
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(99, 102, 241, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--primary-color);
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <!-- Navigation -->
+    <nav>
+        <div class="nav-container">
+            <div style="font-size: 1.5rem; font-weight: bold; background: linear-gradient(135deg, var(--primary-color), var(--secondary-color)); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+                Rate Limiter Design
+            </div>
+            <ul class="nav-links">
+                <li><a href="#overview" class="active">Overview</a></li>
+                <li><a href="#algorithms">Algorithm Comparison</a></li>
+                <li><a href="#visuals">Visual Illustrations</a></li>
+                <li><a href="#datastore">Data Store</a></li>
+                <li><a href="#takeaways">Key Takeaways</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <main>
+        <!-- Hero Section -->
+        <section id="overview" class="hero">
+            <h1>Rate Limiter System Design</h1>
+            <p>Comprehensive analysis of rate limiting algorithms for 100M DAU at 1.15M RPS</p>
+        </section>
+
+        <!-- System Requirements -->
+        <section class="card">
+            <h2>System Requirements & Estimates</h2>
+            
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number">100M</div>
+                    <div class="stat-label">Daily Active Users</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">1.15M</div>
+                    <div class="stat-label">Requests Per Second</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">~10GB</div>
+                    <div class="stat-label">Memory for Cache</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number">429</div>
+                    <div class="stat-label">Rate Limit Status Code</div>
+                </div>
+            </div>
+
+            <h3>Functional Requirements</h3>
+            <ul style="margin: 1rem 0; padding-left: 2rem; line-height: 1.8;">
+                <li>Reject requests exceeding rate limits with HTTP 429 status</li>
+                <li>Support configurable rate limits per client/API</li>
+                <li>Smooth traffic spikes to protect backend services</li>
+                <li>Provide rate limit headers in responses</li>
+            </ul>
+
+            <h3>Non-Functional Requirements</h3>
+            <ul style="margin: 1rem 0; padding-left: 2rem; line-height: 1.8;">
+                <li>High availability (99.99% uptime)</li>
+                <li>Low latency (&lt;10ms for rate limit checks)</li>
+                <li>Horizontal scalability</li>
+                <li>Fault tolerance with graceful degradation</li>
+            </ul>
+        </section>
+
+        <!-- Algorithm Comparison -->
+        <section id="algorithms" class="card">
+            <h2>Algorithm Comparison Matrix</h2>
+            <div class="comparison-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Algorithm</th>
+                            <th>Burst Handling</th>
+                            <th>Storage Usage</th>
+                            <th>Complexity</th>
+                            <th>Latency</th>
+                            <th>Best Use Case</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Token Bucket</strong></td>
+                            <td>✅ Allows up to bucket size</td>
+                            <td>Low (~4-5GB)</td>
+                            <td>Medium</td>
+                            <td>O(1)</td>
+                            <td>API rate limiting with burst allowance</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Leaky Bucket</strong></td>
+                            <td>❌ No bursts allowed</td>
+                            <td>Low (~4-5GB)</td>
+                            <td>Low</td>
+                            <td>O(1)</td>
+                            <td>Steady flow rate enforcement</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Fixed Window</strong></td>
+                            <td>⚠️ Edge case issues</td>
+                            <td>Very Low (~2GB)</td>
+                            <td>Very Low</td>
+                            <td>O(1)</td>
+                            <td>Simple rate limiting needs</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Sliding Window Counter</strong></td>
+                            <td>✅ Smooth distribution</td>
+                            <td>Medium (~6GB)</td>
+                            <td>Medium</td>
+                            <td>O(1)</td>
+                            <td>Balanced accuracy and efficiency</td>
+                        </tr>
+                        <tr>
+                            <td><strong>Sliding Window Log</strong></td>
+                            <td>✅ Most accurate</td>
+                            <td>High (~800GB)</td>
+                            <td>High</td>
+                            <td>O(log N)</td>
+                            <td>High-precision rate limiting</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+        <!-- Visual Illustrations -->
+        <section id="visuals" class="card">
+            <h2>Interactive Algorithm Visualizations</h2>
+
+            <!-- Token Bucket -->
+            <div class="algorithm-visual">
+                <h3>Token Bucket Algorithm</h3>
+                <div class="visual-controls">
+                    <button class="btn" onclick="simulateTokenBurst()">Simulate Burst (5 requests)</button>
+                    <button class="btn" onclick="refillTokens()">Refill Tokens (+3)</button>
+                    <button class="btn" onclick="resetTokenBucket()">Reset (10 tokens)</button>
+                </div>
+                <div class="token-bucket">
+                    <div class="token-counter" id="token-counter">Tokens: 10/10</div>
+                    <div class="bucket" id="token-container">
+                        <!-- Tokens will be added here -->
+                    </div>
+                    <div id="request-indicator-container"></div>
+                </div>
+                <p style="text-align: center; margin-top: 2rem; color: var(--text-secondary);">
+                    <strong>Capacity:</strong> 10 tokens | <strong>Refill Rate:</strong> 3 tokens per refill<br>
+                    Each request consumes 1 token. Requests are rejected when bucket is empty.
+                </p>
+            </div>
+
+            <!-- Leaky Bucket -->
+            <div class="algorithm-visual">
+                <h3>Leaky Bucket Algorithm</h3>
+                <div class="visual-controls">
+                    <button class="btn" onclick="addWater()">Add Requests</button>
+                    <button class="btn" onclick="startLeak()">Start Leak</button>
+                    <button class="btn" onclick="resetLeakyBucket()">Reset</button>
+                </div>
+                <div class="leaky-bucket">
+                    <div class="bucket">
+                        <div class="water-level" id="water-level" style="height: 30%;"></div>
+                        <div class="leak"></div>
+                    </div>
+                </div>
+                <p style="text-align: center; margin-top: 1rem; color: var(--text-secondary);">
+                    Requests leak at constant rate. Overflow results in 429 rejection.
+                </p>
+            </div>
+
+            <!-- Sliding Window -->
+            <div class="algorithm-visual">
+                <h3>Sliding Window Visualization</h3>
+                <div class="visual-controls">
+                    <button class="btn" onclick="moveSlidingWindow()">Move Window</button>
+                    <button class="btn" onclick="addRequests()">Add Requests</button>
+                    <button class="btn" onclick="resetWindow()">Reset</button>
+                </div>
+                <div class="window-timeline" id="timeline">
+                    <div class="sliding-window" id="sliding-window" style="width: 30%; left: 35%;"></div>
+                </div>
+                <p style="text-align: center; margin-top: 1rem; color: var(--text-secondary);">
+                    Window slides continuously, counting requests within the time frame.
+                </p>
+            </div>
+        </section>
+
+        <!-- Data Store Details -->
+        <section id="datastore" class="card">
+            <h2>Data Store Architecture - Redis</h2>
+            
+            <h3>Why Redis?</h3>
+            <ul style="margin: 1rem 0; padding-left: 2rem; line-height: 1.8;">
+                <li>In-memory performance with sub-millisecond latency</li>
+                <li>Atomic operations for concurrent access</li>
+                <li>Built-in TTL for automatic cleanup</li>
+                <li>Master-slave replication with Redis Sentinel</li>
+                <li>Lua scripting for complex atomic operations</li>
+            </ul>
+
+            <h3>Sample Implementation - Token Bucket</h3>
+            <div class="code-block">
+                <pre><code><span class="code-keyword">import</span> redis
+<span class="code-keyword">import</span> time
+<span class="code-keyword">from</span> typing <span class="code-keyword">import</span> Tuple
+
+<span class="code-keyword">class</span> <span class="code-string">TokenBucketRateLimiter</span>:
+    <span class="code-keyword">def</span> __init__(self, redis_client: redis.Redis):
+        self.redis = redis_client
+        self.bucket_capacity = <span class="code-number">100</span>  <span class="code-comment"># Maximum tokens</span>
+        self.refill_rate = <span class="code-number">10</span>      <span class="code-comment"># Tokens per second</span>
+        
+    <span class="code-keyword">def</span> allow_request(self, client_id: str) -> Tuple[bool, int]:
+        <span class="code-string">"""Check if request is allowed using token bucket algorithm"""</span>
+        key = f<span class="code-string">"rate_limit:{client_id}"</span>
+        
+        <span class="code-comment"># Lua script for atomic token bucket operation</span>
+        lua_script = <span class="code-string">"""
+        local key = KEYS[1]
+        local capacity = tonumber(ARGV[1])
+        local refill_rate = tonumber(ARGV[2])
+        local now = tonumber(ARGV[3])
+        
+        local bucket = redis.call('HMGET', key, 'tokens', 'last_refill')
+        local tokens = tonumber(bucket[1]) or capacity
+        local last_refill = tonumber(bucket[2]) or now
+        
+        -- Calculate tokens to add based on time passed
+        local elapsed = now - last_refill
+        local new_tokens = math.min(capacity, tokens + elapsed * refill_rate)
+        
+        if new_tokens >= 1 then
+            -- Consume a token
+            redis.call('HMSET', key, 'tokens', new_tokens - 1, 'last_refill', now)
+            redis.call('EXPIRE', key, 3600)
+            return {1, new_tokens - 1}
+        else
+            return {0, new_tokens}
+        end
+        """</span>
+        
+        result = self.redis.eval(
+            lua_script, 
+            <span class="code-number">1</span>, 
+            key, 
+            self.bucket_capacity, 
+            self.refill_rate, 
+            time.time()
+        )
+        
+        <span class="code-keyword">return</span> bool(result[<span class="code-number">0</span>]), int(result[<span class="code-number">1</span>])</code></pre>
+            </div>
+
+            <h3>Partitioning Strategy</h3>
+            <ul style="margin: 1rem 0; padding-left: 2rem; line-height: 1.8;">
+                <li><strong>Hash-based sharding:</strong> Consistent hashing for even distribution</li>
+                <li><strong>Key pattern:</strong> rate_limit:{client_id}:{timestamp_bucket}</li>
+                <li><strong>Replication factor:</strong> 3 replicas for high availability</li>
+                <li><strong>Failover:</strong> Redis Sentinel for automatic master election</li>
+            </ul>
+        </section>
+
+        <!-- Key Takeaways -->
+        <section id="takeaways" class="card">
+            <h2>Key Takeaways & Recommendations</h2>
+            
+            <div class="accordion">
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <h3>💪 Strengths Demonstrated</h3>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <ul style="line-height: 1.8; padding-left: 1rem;">
+                            <li>Deep understanding of algorithm trade-offs</li>
+                            <li>Comprehensive comparison across multiple dimensions</li>
+                            <li>Strong analytical skills in evaluating storage and latency</li>
+                            <li>Practical implementation considerations</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <h3>📈 Areas for Improvement</h3>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <ul style="line-height: 1.8; padding-left: 1rem;">
+                            <li>Consider distributed clock skew handling</li>
+                            <li>Explore cost trade-offs for different storage solutions</li>
+                            <li>Address edge cases in distributed systems</li>
+                            <li>Discuss graceful degradation strategies</li>
+                        </ul>
+                    </div>
+                </div>
+
+                <div class="accordion-item">
+                    <div class="accordion-header" onclick="toggleAccordion(this)">
+                        <h3>🎯 Final Recommendation</h3>
+                        <span class="accordion-icon">▼</span>
+                    </div>
+                    <div class="accordion-content">
+                        <p style="line-height: 1.8;">
+                            <strong>Token Bucket</strong> emerges as the optimal choice for most production scenarios, offering:
+                        </p>
+                        <ul style="line-height: 1.8; padding-left: 1rem; margin-top: 1rem;">
+                            <li>Best balance between burst handling and rate enforcement</li>
+                            <li>Reasonable storage requirements (~5GB for 100M users)</li>
+                            <li>O(1) latency with atomic Redis operations</li>
+                            <li>Production-proven at scale (used by AWS, Google Cloud)</li>
+                        </ul>
+                        <p style="margin-top: 1rem; padding: 1rem; background: rgba(99, 102, 241, 0.1); border-radius: 8px; border-left: 4px solid var(--primary-color);">
+                            For specific use cases requiring strict flow control, consider Leaky Bucket. 
+                            For simpler needs with lower accuracy requirements, Fixed Window suffices.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // Smooth scroll navigation
+        document.querySelectorAll('.nav-links a').forEach(anchor => {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    
+                    // Update active nav
+                    document.querySelectorAll('.nav-links a').forEach(a => a.classList.remove('active'));
+                    this.classList.add('active');
+                }
+            });
+        });
+
+        // Intersection Observer for fade-in animations
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.style.animationDelay = '0.1s';
+                }
+            });
+        }, { threshold: 0.1 });
+
+        document.querySelectorAll('section').forEach(section => {
+            observer.observe(section);
+        });
+
+        // Token Bucket Simulation
+        let tokenCount = 10;
+        const maxTokens = 10;
+        
+        function updateTokenDisplay() {
+            const counter = document.getElementById('token-counter');
+            counter.textContent = `Tokens: ${tokenCount}/${maxTokens}`;
+            
+            const container = document.getElementById('token-container');
+            container.innerHTML = '';
+            
+            // Display all current tokens
+            for (let i = 0; i < tokenCount; i++) {
+                const token = document.createElement('div');
+                token.className = 'token';
+                token.textContent = '◉';
+                token.style.animationDelay = `${i * 0.05}s`;
+                container.appendChild(token);
+            }
+        }
+        
+        function simulateTokenBurst() {
+            const indicatorContainer = document.getElementById('request-indicator-container');
+            indicatorContainer.innerHTML = '';
+            
+            let requestsMade = 0;
+            const burstSize = 5;
+            
+            for (let i = 0; i < burstSize; i++) {
+                setTimeout(() => {
+                    const indicator = document.createElement('div');
+                    indicator.className = 'request-indicator';
+                    indicator.style.top = `${20 + (i * 40)}px`;
+                    
+                    if (tokenCount > 0) {
+                        // Consume token
+                        tokenCount--;
+                        requestsMade++;
+                        
+                        // Animate token consumption
+                        const tokens = document.querySelectorAll('#token-container .token');
+                        if (tokens.length > tokenCount) {
+                            tokens[tokenCount].classList.add('consumed');
+                        }
+                        
+                        indicator.classList.add('success');
+                        indicator.textContent = `✓ Request ${i + 1} Allowed`;
+                    } else {
+                        indicator.classList.add('error');
+                        indicator.textContent = `✗ Request ${i + 1} Rejected (429)`;
+                    }
+                    
+                    indicatorContainer.appendChild(indicator);
+                    updateTokenDisplay();
+                    
+                    // Remove indicator after animation
+                    setTimeout(() => indicator.remove(), 2000);
+                }, i * 300);
+            }
+        }
+
+        function refillTokens() {
+            const refillAmount = 3;
+            const oldCount = tokenCount;
+            tokenCount = Math.min(maxTokens, tokenCount + refillAmount);
+            
+            if (oldCount < maxTokens) {
+                const actualRefill = tokenCount - oldCount;
+                updateTokenDisplay();
+                
+                // Show refill message
+                const indicatorContainer = document.getElementById('request-indicator-container');
+                const indicator = document.createElement('div');
+                indicator.className = 'request-indicator success';
+                indicator.textContent = `+ ${actualRefill} tokens refilled`;
+                indicator.style.top = '50%';
+                indicatorContainer.appendChild(indicator);
+                
+                setTimeout(() => indicator.remove(), 2000);
+            } else {
+                // Bucket is full
+                const indicatorContainer = document.getElementById('request-indicator-container');
+                const indicator = document.createElement('div');
+                indicator.className = 'request-indicator error';
+                indicator.textContent = 'Bucket is full!';
+                indicator.style.top = '50%';
+                indicatorContainer.appendChild(indicator);
+                
+                setTimeout(() => indicator.remove(), 2000);
+            }
+        }
+
+        function resetTokenBucket() {
+            tokenCount = maxTokens;
+            updateTokenDisplay();
+            
+            const indicatorContainer = document.getElementById('request-indicator-container');
+            const indicator = document.createElement('div');
+            indicator.className = 'request-indicator success';
+            indicator.textContent = 'Bucket reset to full capacity';
+            indicator.style.top = '50%';
+            indicatorContainer.appendChild(indicator);
+            
+            setTimeout(() => indicator.remove(), 2000);
+        }
+
+        // Leaky Bucket Simulation
+        let waterLevel = 30;
+        let leaking = false;
+
+        function addWater() {
+            const water = document.getElementById('water-level');
+            waterLevel = Math.min(100, waterLevel + 20);
+            water.style.height = `${waterLevel}%`;
+            
+            if (waterLevel >= 100) {
+                const container = water.parentElement;
+                const errorMsg = document.createElement('div');
+                errorMsg.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: var(--error); font-weight: bold; font-size: 1.5rem;';
+                errorMsg.textContent = '429 - Overflow!';
+                container.appendChild(errorMsg);
+                setTimeout(() => errorMsg.remove(), 2000);
+            }
+        }
+
+        function startLeak() {
+            if (leaking) return;
+            leaking = true;
+            
+            const interval = setInterval(() => {
+                const water = document.getElementById('water-level');
+                waterLevel = Math.max(0, waterLevel - 5);
+                water.style.height = `${waterLevel}%`;
+                
+                if (waterLevel <= 0) {
+                    clearInterval(interval);
+                    leaking = false;
+                }
+            }, 500);
+        }
+
+        function resetLeakyBucket() {
+            waterLevel = 30;
+            leaking = false;
+            document.getElementById('water-level').style.height = '30%';
+        }
+
+        // Sliding Window Simulation
+        let windowPosition = 35;
+        
+        function moveSlidingWindow() {
+            const window = document.getElementById('sliding-window');
+            windowPosition = (windowPosition + 10) % 70;
+            window.style.left = `${windowPosition}%`;
+        }
+
+        function addRequests() {
+            const timeline = document.getElementById('timeline');
+            
+            for (let i = 0; i < 5; i++) {
+                const request = document.createElement('div');
+                request.className = 'request-bar';
+                request.style.left = `${Math.random() * 90}%`;
+                request.style.height = `${20 + Math.random() * 60}%`;
+                request.style.animationDelay = `${i * 0.1}s`;
+                timeline.appendChild(request);
+                
+                setTimeout(() => request.remove(), 5000);
+            }
+        }
+
+        function resetWindow() {
+            windowPosition = 35;
+            document.getElementById('sliding-window').style.left = '35%';
+            const bars = document.querySelectorAll('.request-bar');
+            bars.forEach(bar => bar.remove());
+        }
+
+        // Accordion functionality
+        function toggleAccordion(header) {
+            const item = header.parentElement;
+            item.classList.toggle('active');
+        }
+
+        // Initialize some visual elements on load
+        window.addEventListener('load', () => {
+            // Initialize token bucket with visual tokens
+            updateTokenDisplay();
+            
+            // Add timeline segments
+            const timeline = document.getElementById('timeline');
+            for (let i = 1; i < 10; i++) {
+                const segment = document.createElement('div');
+                segment.className = 'window-segment';
+                segment.style.left = `${i * 10}%`;
+                timeline.appendChild(segment);
+            }
+        });
+    </script>
+</body>
+</html>
